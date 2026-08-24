@@ -3,9 +3,11 @@
 interface HeaderProps {
   stationCount: number;
   lastUpdated: Date | null;
+  darkMode?: boolean;
+  onToggleDarkMode?: () => void;
 }
 
-export default function Header({ stationCount, lastUpdated }: HeaderProps) {
+export default function Header({ stationCount, lastUpdated, darkMode, onToggleDarkMode }: HeaderProps) {
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
@@ -17,17 +19,13 @@ export default function Header({ stationCount, lastUpdated }: HeaderProps) {
           <div className="flex items-center gap-2">
             <span className="text-2xl">🌍</span>
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">
-                Pollution Monitor
-              </h1>
-              <p className="text-xs text-gray-500">
-                Hyperlocal Air Quality Dashboard
-              </p>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">Pollution Monitor</h1>
+              <p className="text-xs text-gray-500">Hyperlocal Air Quality Dashboard</p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex items-center gap-3 text-sm">
           <div className="flex items-center gap-1.5 text-gray-600">
             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             <span className="text-xs">
@@ -39,6 +37,15 @@ export default function Header({ stationCount, lastUpdated }: HeaderProps) {
               Updated {formatTime(lastUpdated)}
             </div>
           )}
+
+          {/* Dark mode toggle */}
+          <button
+            onClick={onToggleDarkMode}
+            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-lg"
+            title={darkMode ? "Light mode" : "Dark mode"}
+          >
+            {darkMode ? "☀️" : "🌙"}
+          </button>
         </div>
       </div>
     </header>
