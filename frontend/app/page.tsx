@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Header from "@/components/Header";
 import AlertPanel from "@/components/AlertPanel";
 import StationDetail from "@/components/StationDetail";
 import Legend from "@/components/Legend";
 import CitySearch from "@/components/CitySearch";
+import ComparePanel from "@/components/ComparePanel";
 import { Station, Alert } from "@/types";
 import { fetchAllStations } from "@/lib/api";
 
@@ -26,12 +27,12 @@ export default function Home() {
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
   const [alertPanelOpen, setAlertPanelOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([20, 0]);
   const [mapZoom, setMapZoom] = useState(2);
-  const mapRef = useRef<any>(null);
 
   const loadStations = useCallback(async () => {
     try {
@@ -51,13 +52,8 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [loadStations]);
 
-  // Dark mode
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
   const handleStationClick = useCallback((stationId: number) => {
@@ -72,7 +68,6 @@ export default function Home() {
   const handleCitySearch = useCallback((lat: number, lon: number, name: string) => {
     setMapCenter([lat, lon]);
     setMapZoom(12);
-    // Trigger a viewport-based fetch for the searched area
     fetch(`/api/stations?min_lon=${lon - 0.2}&min_lat=${lat - 0.2}&max_lon=${lon + 0.2}&max_lat=${lat + 0.2}`)
       .then((r) => r.json())
       .then((data) => {
@@ -91,14 +86,9 @@ export default function Home() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setMapCenter([latitude, longitude]);
-        setMapZoom(12);
-        handleCitySearch(latitude, longitude, "My Location");
+        handleCitySearch(pos.coords.latitude, pos.coords.longitude, "My Location");
       },
-      () => {
-        alert("Location access denied. Please enable location permissions.");
-      }
+      () => alert("Location access denied.")
     );
   }, [handleCitySearch]);
 
@@ -119,12 +109,10 @@ export default function Home() {
     );
     const csv = [...headers, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = URL.createObjectURL(blob);
     a.download = "pollution_stations.csv";
     a.click();
-    URL.revokeObjectURL(url);
   }, [stations]);
 
   return (
@@ -146,32 +134,27 @@ export default function Home() {
         />
       </div>
 
-      {/* City Search - top left */}
+      {/* City Search */}
       <div className="fixed top-[60px] left-4 z-[1000] w-72">
         <CitySearch onSelect={handleCitySearch} />
       </div>
 
-      {/* Action buttons - left side */}
+      {/* Action buttons */}
       <div className="fixed top-[110px] left-4 z-[1000] flex flex-col gap-2">
-        <button
-          onClick={handleMyLocation}
-          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2"
-          title="My Location"
-        >
+        <button onClick={handleMyLocation}
+          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
           <span>📍</span> My Location
         </button>
-        <button
-          onClick={handleShareLink}
-          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2"
-          title="Share Link"
-        >
+        <button onClick={() => setCompareOpen(true)}
+          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
+          <span>⚖️</span> Compare
+        </button>
+        <button onClick={handleShareLink}
+          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
           <span>🔗</span> Share
         </button>
-        <button
-          onClick={handleExportCSV}
-          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2"
-          title="Export CSV"
-        >
+        <button onClick={handleExportCSV}
+          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
           <span>📥</span> Export
         </button>
       </div>
@@ -192,6 +175,12 @@ export default function Home() {
         isOpen={alertPanelOpen}
         onToggle={() => setAlertPanelOpen(!alertPanelOpen)}
         onAlertClick={handleAlertClick}
+      />
+
+      <ComparePanel
+        isOpen={compareOpen}
+        onClose={() => setCompareOpen(false)}
+        onCitySelect={(lat, lon) => handleCitySearch(lat, lon, "")}
       />
 
       <StationDetail

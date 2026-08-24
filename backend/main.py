@@ -23,7 +23,7 @@ from backend.config import Settings
 from backend import db
 from backend.services.openaq_client import OpenAQClient
 from backend.services.scheduler import DataScheduler
-from backend.routers import stations, alerts, websocket, history
+from backend.routers import stations, alerts, websocket, history, compare
 
 # Configure logging
 logging.basicConfig(
@@ -91,6 +91,7 @@ app.include_router(stations.router)
 app.include_router(alerts.router)
 app.include_router(websocket.router)
 app.include_router(history.router)
+app.include_router(compare.router)
 
 
 @app.get("/api/health")
