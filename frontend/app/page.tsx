@@ -28,12 +28,14 @@ export default function Home() {
   const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
   const [alertPanelOpen, setAlertPanelOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchingArea, setFetchingArea] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([20, 0]);
   const [mapZoom, setMapZoom] = useState(2);
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const loadStations = useCallback(async () => {
     try {
@@ -49,7 +51,8 @@ export default function Home() {
 
   useEffect(() => {
     loadStations();
-    const interval = setInterval(loadStations, 5 * 60 * 1000);
+    // Auto-refresh every 2 minutes
+    const interval = setInterval(loadStations, 2 * 60 * 1000);
     return () => clearInterval(interval);
   }, [loadStations]);
 
@@ -70,12 +73,8 @@ export default function Home() {
     setMapCenter([lat, lon]);
     setMapZoom(12);
     setFetchingArea(true);
-
     try {
-      // 1. Fetch live data from OpenAQ for this area
       await fetchStationsOnDemand(lat, lon, 15000);
-
-      // 2. Reload all stations from cache (now includes the new data)
       const data = await fetchAllStations();
       setStations(data.stations || []);
       setLastUpdated(new Date());
@@ -89,9 +88,7 @@ export default function Home() {
   const handleMyLocation = useCallback(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        handleCitySearch(pos.coords.latitude, pos.coords.longitude, "My Location");
-      },
+      (pos) => handleCitySearch(pos.coords.latitude, pos.coords.longitude, "My Location"),
       () => alert("Location access denied.")
     );
   }, [handleCitySearch]);
@@ -103,8 +100,20 @@ export default function Home() {
     url.searchParams.set("zoom", mapZoom.toString());
     if (selectedStationId) url.searchParams.set("station", selectedStationId.toString());
     navigator.clipboard.writeText(url.toString());
+    setShareOpen(false);
     alert("Link copied to clipboard!");
   }, [mapCenter, mapZoom, selectedStationId]);
+
+  const handleShareStats = useCallback(() => {
+    const stats = stations
+      .filter((s) => s.latest_value !== null)
+      .map((s) => `${s.name}: ${s.latest_display_name} = ${s.latest_value} ${s.latest_unit}`)
+      .join("\n");
+    const text = `🌍 Pollution Monitor Stats\n${"─".repeat(30)}\n${stats}\n${"─".repeat(30)}\nData from OpenAQ · ${new Date().toLocaleString()}`;
+    navigator.clipboard.writeText(text);
+    setShareOpen(false);
+    alert("Stats copied to clipboard!");
+  }, [stations]);
 
   const handleExportCSV = useCallback(() => {
     const headers = ["id,name,locality,country_code,latitude,longitude,latest_pollutant,latest_value,latest_unit"];
@@ -138,15 +147,14 @@ export default function Home() {
         />
       </div>
 
-      {/* City Search */}
-      <div className="fixed top-[60px] left-4 z-[1000] w-72">
-        <CitySearch onSelect={handleCitySearch} />
+      {/* City Search — higher z-index when focused */}
+      <div className={`fixed top-[60px] left-4 w-72 transition-all ${searchFocused ? "z-[1100]" : "z-[1000]"}`}>
+        <CitySearch onSelect={handleCitySearch} onFocusChange={setSearchFocused} />
       </div>
 
-      {/* Action buttons */}
-      <div className="fixed top-[110px] left-4 z-[1000] flex flex-col gap-2">
-        <button onClick={handleMyLocation}
-          disabled={fetchingArea}
+      {/* Action buttons — hidden behind search dropdown when focused */}
+      <div className={`fixed top-[110px] left-4 flex flex-col gap-2 transition-all ${searchFocused ? "z-[999] opacity-30" : "z-[1000]"}`}>
+        <button onClick={handleMyLocation} disabled={fetchingArea}
           className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2 disabled:opacity-50">
           {fetchingArea ? (
             <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500" /> Fetching...</>
@@ -158,17 +166,30 @@ export default function Home() {
           className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
           <span>⚖️</span> Compare
         </button>
-        <button onClick={handleShareLink}
-          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
-          <span>🔗</span> Share
-        </button>
+        <div className="relative">
+          <button onClick={() => setShareOpen(!shareOpen)}
+            className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
+            <span>🔗</span> Share
+          </button>
+          {shareOpen && (
+            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-56">
+              <button onClick={handleShareLink}
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2 border-b border-gray-50">
+                <span>🔗</span> Copy Link
+              </button>
+              <button onClick={handleShareStats}
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2">
+                <span>📊</span> Copy Stats
+              </button>
+            </div>
+          )}
+        </div>
         <button onClick={handleExportCSV}
           className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
           <span>📥</span> Export
         </button>
       </div>
 
-      {/* Fetching indicator */}
       {fetchingArea && (
         <div className="fixed top-[60px] left-80 z-[1000] bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-700 flex items-center gap-2">
           <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500" />
