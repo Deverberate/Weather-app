@@ -62,9 +62,8 @@ export default function AlertPanel({ isOpen, onToggle, onAlertClick }: AlertPane
 
   return (
     <>
-      {/* Bell icon — center bottom floating button */}
       <button onClick={onToggle}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000] w-14 h-14 glass rounded-full flex items-center justify-center hover:bg-white/90 transition-all duration-300 border border-white/30 shadow-xl shadow-black/10 btn-glow relative"
+        className="fixed bottom-2 left-1/2 -translate-x-1/2 z-[1000] w-14 h-14 glass rounded-full flex items-center justify-center hover:bg-white/90 transition-all duration-300 border border-white/30 shadow-xl shadow-black/10 btn-glow relative"
         title="Pollution Alerts">
         <span className="text-2xl">🔔</span>
         {alerts.length > 0 && (
@@ -75,7 +74,6 @@ export default function AlertPanel({ isOpen, onToggle, onAlertClick }: AlertPane
         <div className={`absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-red-400"} ${connected ? "animate-pulse" : ""}`} />
       </button>
 
-      {/* Panel */}
       <div className={`fixed top-0 right-0 h-full w-96 glass-dark z-[999] transform transition-transform duration-300 ${isOpen ? "translate-x-0" : "translate-x-full"}`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <div>
