@@ -10,8 +10,6 @@ from backend import db
 
 logger = logging.getLogger(__name__)
 
-# Delay between individual API calls to respect rate limits
-INTER_REQUEST_DELAY = 2.0  # seconds
 INTER_CITY_DELAY = 5.0  # seconds between city fetches
 
 
@@ -23,14 +21,12 @@ class DataScheduler:
         self.interval = interval_seconds
         self._task: Optional[asyncio.Task] = None
         self._running = False
-        # Default monitoring areas: just 2 cities to stay under rate limit
         self._watched_areas: List[dict] = [
             {"name": "New Delhi", "lat": 28.6139, "lon": 77.2090, "radius": 15000},
             {"name": "London", "lat": 51.5074, "lon": -0.1278, "radius": 15000},
         ]
 
     def start(self) -> None:
-        """Start the background polling loop."""
         if self._running:
             return
         self._running = True
@@ -38,14 +34,12 @@ class DataScheduler:
         logger.info(f"Scheduler started (interval={self.interval}s, {len(self._watched_areas)} areas)")
 
     def stop(self) -> None:
-        """Stop the background polling loop."""
         self._running = False
         if self._task:
             self._task.cancel()
         logger.info("Scheduler stopped")
 
     async def _poll_loop(self) -> None:
-        """Main polling loop."""
         while self._running:
             try:
                 await self._fetch_all_areas()
@@ -54,7 +48,6 @@ class DataScheduler:
             await asyncio.sleep(self.interval)
 
     async def _fetch_all_areas(self) -> None:
-        """Fetch latest data for all watched areas with delays between cities."""
         preset = "who"
         try:
             from backend.config import Settings
@@ -68,17 +61,14 @@ class DataScheduler:
             except Exception as e:
                 logger.error(f"Error fetching area {area['name']}: {e}")
 
-            # Delay between cities
             if i < len(self._watched_areas) - 1:
                 logger.info(f"Waiting {INTER_CITY_DELAY}s before next city...")
                 await asyncio.sleep(INTER_CITY_DELAY)
 
     async def _fetch_area(self, area: dict, preset: str) -> None:
-        """Fetch and cache data for a single geographic area."""
         coords = f"{area['lat']},{area['lon']}"
         radius = area.get("radius", 15000)
 
-        # Fetch locations within radius (limit 10 to reduce API calls)
         resp = await self.client.get_locations(coordinates=coords, radius=radius, limit=10)
         locations = resp.get("results", [])
         logger.info(f"Found {len(locations)} stations near {area['name']}")
@@ -87,11 +77,12 @@ class DataScheduler:
             parsed = self.client.parse_location(loc_data)
             if not parsed["latitude"] and not parsed["longitude"]:
                 continue
-            # Skip mobile sensors
             if parsed["is_mobile"]:
                 continue
 
-            # Upsert station
+            # Build sensor map from location data so we can resolve parameter names
+            sensor_map = self.client.build_sensor_map(loc_data)
+
             await db.upsert_station(
                 station_id=parsed["id"],
                 name=parsed["name"],
@@ -105,16 +96,16 @@ class DataScheduler:
                 sensors=parsed["sensors"],
             )
 
-            # Fetch latest readings for this location
+            # Fetch latest readings
             latest_resp = await self.client.get_latest(location_id=parsed["id"])
             readings_raw = latest_resp.get("results", [])
 
             parsed_readings = []
             for reading in readings_raw:
-                pr = self.client.parse_measurement(reading)
+                # Pass sensor_map so parameter names are resolved
+                pr = self.client.parse_measurement(reading, sensor_map=sensor_map)
                 parsed_readings.append(pr)
 
-                # Upsert reading
                 if pr["value"] is not None:
                     await db.upsert_reading(
                         station_id=parsed["id"],
@@ -126,7 +117,6 @@ class DataScheduler:
                         last_updated=pr["last_updated"],
                     )
 
-            # Check thresholds and generate alerts
             if parsed_readings:
                 await check_station_readings(
                     station_id=parsed["id"],
@@ -138,11 +128,9 @@ class DataScheduler:
                 )
 
     def add_area(self, name: str, lat: float, lon: float, radius: int = 15000) -> None:
-        """Add a new area to watch."""
         self._watched_areas.append({"name": name, "lat": lat, "lon": lon, "radius": radius})
 
     async def fetch_area_now(self, lat: float, lon: float, radius: int = 15000) -> list:
-        """Immediately fetch data for an arbitrary area."""
         coords = f"{lat},{lon}"
         resp = await self.client.get_locations(coordinates=coords, radius=radius, limit=10)
         locations = resp.get("results", [])
@@ -152,6 +140,8 @@ class DataScheduler:
             parsed = self.client.parse_location(loc_data)
             if not parsed["latitude"] and not parsed["longitude"]:
                 continue
+
+            sensor_map = self.client.build_sensor_map(loc_data)
 
             await db.upsert_station(
                 station_id=parsed["id"],
@@ -166,12 +156,11 @@ class DataScheduler:
                 sensors=parsed["sensors"],
             )
 
-            # Get latest readings
             latest_resp = await self.client.get_latest(location_id=parsed["id"])
             readings_raw = latest_resp.get("results", [])
             parsed_readings = []
             for reading in readings_raw:
-                pr = self.client.parse_measurement(reading)
+                pr = self.client.parse_measurement(reading, sensor_map=sensor_map)
                 parsed_readings.append(pr)
                 if pr["value"] is not None:
                     await db.upsert_reading(

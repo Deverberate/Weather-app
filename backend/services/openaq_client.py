@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 
 import aiohttp
 
@@ -144,19 +144,41 @@ class OpenAQClient:
             "sensors": sensors,
         }
 
-    def parse_measurement(self, data: dict) -> dict:
-        """Parse an OpenAQ measurement/reading into our format."""
-        param = data.get("parameter", {})
+    def build_sensor_map(self, location_data: dict) -> Dict[int, dict]:
+        """Build a lookup map from sensor_id -> parameter info for a location."""
+        sensor_map = {}
+        for sensor in location_data.get("sensors", []):
+            param = sensor.get("parameter", {})
+            sensor_map[sensor.get("id", 0)] = {
+                "parameter": param.get("name", "unknown"),
+                "display_name": param.get("displayName", param.get("name", "Unknown")),
+                "unit": param.get("units", ""),
+            }
+        return sensor_map
+
+    def parse_measurement(self, data: dict, sensor_map: Optional[Dict[int, dict]] = None) -> dict:
+        """Parse an OpenAQ measurement/reading into our format.
+
+        The /latest endpoint only returns sensorsId and value, no parameter info.
+        Use sensor_map (from build_sensor_map) to look up parameter names.
+        """
         coords = data.get("coordinates", {})
+        sensor_id = data.get("sensorsId", 0)
+
+        # Look up parameter info from sensor map
+        param_info = {}
+        if sensor_map and sensor_id in sensor_map:
+            param_info = sensor_map[sensor_id]
+
         return {
-            "sensor_id": data.get("sensorId", 0),
-            "parameter": param.get("name", "unknown"),
-            "display_name": param.get("displayName", param.get("name", "Unknown")),
+            "sensor_id": sensor_id,
+            "parameter": param_info.get("parameter", "unknown"),
+            "display_name": param_info.get("display_name", "Unknown"),
             "value": data.get("value", 0),
-            "unit": param.get("units", ""),
+            "unit": param_info.get("unit", ""),
             "last_updated": data.get("datetime", {}).get("utc"),
             "latitude": coords.get("latitude"),
             "longitude": coords.get("longitude"),
-            "location_id": data.get("locationId"),
+            "location_id": data.get("locationsId"),
             "location_name": data.get("location"),
         }

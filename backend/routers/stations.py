@@ -53,6 +53,10 @@ async def list_all_stations():
                 "latitude": row["latitude"],
                 "longitude": row["longitude"],
                 "readings": [],
+                "latest_pollutant": None,
+                "latest_value": None,
+                "latest_unit": None,
+                "latest_display_name": None,
             }
         if row.get("parameter"):
             stations[sid]["readings"].append({
@@ -61,6 +65,24 @@ async def list_all_stations():
                 "value": row["value"],
                 "unit": row["unit"],
             })
+
+    # Pick the worst pollutant as the "latest" for map coloring
+    priority_params = ["pm25", "pm10", "no2", "o3", "so2", "co"]
+    for sid, station in stations.items():
+        best_reading = None
+        best_priority = -1
+        for r in station["readings"]:
+            param = r["parameter"].lower()
+            if param in priority_params:
+                idx = priority_params.index(param)
+                if idx > best_priority:
+                    best_priority = idx
+                    best_reading = r
+        if best_reading:
+            station["latest_pollutant"] = best_reading["parameter"]
+            station["latest_value"] = best_reading["value"]
+            station["latest_unit"] = best_reading["unit"]
+            station["latest_display_name"] = best_reading["display_name"]
 
     result = list(stations.values())
     return {"stations": result, "count": len(result)}
@@ -91,8 +113,6 @@ async def get_station_history(
     if not detail:
         raise HTTPException(status_code=404, detail="Station not found")
 
-    # Get readings from latest_readings (we store latest; history requires API call)
-    # For now return what we have cached
     readings = detail.get("readings", [])
     if parameter:
         readings = [r for r in readings if r.get("parameter") == parameter]
