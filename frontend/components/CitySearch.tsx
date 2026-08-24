@@ -13,12 +13,36 @@ interface SearchResult {
   type: string;
 }
 
+const PRESET_CITIES = [
+  { name: "New Delhi", lat: 28.6139, lon: 77.2090, flag: "🇮🇳" },
+  { name: "London", lat: 51.5074, lon: -0.1278, flag: "🇬🇧" },
+  { name: "Beijing", lat: 39.9042, lon: 116.4074, flag: "🇨🇳" },
+  { name: "Los Angeles", lat: 34.0522, lon: -118.2437, flag: "🇺🇸" },
+  { name: "Tokyo", lat: 35.6762, lon: 139.6503, flag: "🇯🇵" },
+  { name: "Paris", lat: 48.8566, lon: 2.3522, flag: "🇫🇷" },
+  { name: "Mumbai", lat: 19.076, lon: 72.8777, flag: "🇮🇳" },
+  { name: "Cairo", lat: 30.0444, lon: 31.2357, flag: "🇪🇬" },
+  { name: "Accra", lat: 5.6037, lon: -0.1870, flag: "🇬🇭" },
+  { name: "Sydney", lat: -33.8688, lon: 151.2093, flag: "🇦🇺" },
+  { name: "San Francisco", lat: 37.7749, lon: -122.4194, flag: "🇺🇸" },
+  { name: "Dubai", lat: 25.2048, lon: 55.2708, flag: "🇦🇪" },
+];
+
 export default function CitySearch({ onSelect }: CitySearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Filter presets based on query
+  const filteredPresets = query.length === 0
+    ? PRESET_CITIES
+    : PRESET_CITIES.filter((c) =>
+        c.name.toLowerCase().includes(query.toLowerCase())
+      );
+
+  const showDropdown = focused && (filteredPresets.length > 0 || results.length > 0 || query.length >= 3);
 
   useEffect(() => {
     if (query.length < 3) {
@@ -34,10 +58,7 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
         { headers: { "User-Agent": "PollutionMonitor/1.0" } }
       )
         .then((r) => r.json())
-        .then((data) => {
-          setResults(data);
-          setOpen(true);
-        })
+        .then((data) => setResults(data))
         .catch(() => {})
         .finally(() => setLoading(false));
     }, 400);
@@ -47,17 +68,25 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
     };
   }, [query]);
 
-  const handleSelect = (result: SearchResult) => {
-    const name = result.display_name.split(",")[0];
-    onSelect(parseFloat(result.lat), parseFloat(result.lon), name);
+  const handleSelect = (lat: number, lon: number, name: string) => {
+    onSelect(lat, lon, name);
     setQuery(name);
-    setOpen(false);
     setResults([]);
+    setFocused(false);
+  };
+
+  const handlePresetSelect = (city: typeof PRESET_CITIES[0]) => {
+    handleSelect(city.lat, city.lon, city.name);
+  };
+
+  const handleNominatimSelect = (result: SearchResult) => {
+    const name = result.display_name.split(",")[0];
+    handleSelect(parseFloat(result.lat), parseFloat(result.lon), name);
   };
 
   return (
     <div className="relative">
-      <div className="flex items-center bg-white border border-gray-200 rounded-lg shadow-sm px-3 py-2 gap-2">
+      <div className="flex items-center bg-white border border-gray-200 rounded-lg shadow-sm px-3 py-2 gap-2 focus-within:border-blue-300 focus-within:ring-1 focus-within:ring-blue-200 transition-all">
         <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
@@ -65,7 +94,8 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => results.length > 0 && setOpen(true)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setTimeout(() => setFocused(false), 200)}
           placeholder="Search city or location..."
           className="flex-1 text-sm text-gray-900 placeholder-gray-400 outline-none bg-transparent"
         />
@@ -74,7 +104,7 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
         )}
         {query && (
           <button
-            onClick={() => { setQuery(""); setResults([]); setOpen(false); }}
+            onClick={() => { setQuery(""); setResults([]); }}
             className="text-gray-400 hover:text-gray-600"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -84,18 +114,61 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
         )}
       </div>
 
-      {open && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
-          {results.map((r, i) => (
-            <button
-              key={i}
-              className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm text-gray-700 border-b border-gray-50 last:border-0"
-              onClick={() => handleSelect(r)}
-            >
-              <div className="font-medium">{r.display_name.split(",")[0]}</div>
-              <div className="text-xs text-gray-400 truncate">{r.display_name}</div>
-            </button>
-          ))}
+      {showDropdown && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
+          {/* Preset cities */}
+          {filteredPresets.length > 0 && (
+            <div>
+              {query.length === 0 && (
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50">
+                  Popular Cities
+                </div>
+              )}
+              {filteredPresets.map((city) => (
+                <button
+                  key={city.name}
+                  className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm text-gray-700 flex items-center gap-2 border-b border-gray-50 last:border-0 transition-colors"
+                  onMouseDown={() => handlePresetSelect(city)}
+                >
+                  <span className="text-lg">{city.flag}</span>
+                  <div>
+                    <div className="font-medium">{city.name}</div>
+                    <div className="text-[10px] text-gray-400">
+                      {city.lat.toFixed(2)}°, {city.lon.toFixed(2)}°
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Nominatim search results */}
+          {results.length > 0 && (
+            <div>
+              {filteredPresets.length > 0 && (
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50">
+                  Search Results
+                </div>
+              )}
+              {results.map((r, i) => (
+                <button
+                  key={i}
+                  className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm text-gray-700 border-b border-gray-50 last:border-0 transition-colors"
+                  onMouseDown={() => handleNominatimSelect(r)}
+                >
+                  <div className="font-medium">{r.display_name.split(",")[0]}</div>
+                  <div className="text-xs text-gray-400 truncate">{r.display_name}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* No results */}
+          {query.length >= 3 && !loading && results.length === 0 && filteredPresets.length === 0 && (
+            <div className="px-3 py-4 text-center text-sm text-gray-400">
+              No results for "{query}"
+            </div>
+          )}
         </div>
       )}
     </div>
