@@ -62,17 +62,17 @@ export default function AlertPanel({ isOpen, onToggle, onAlertClick }: AlertPane
 
   return (
     <>
-      {/* Bell icon — positioned below dark mode button */}
+      {/* Bell icon — center bottom floating button */}
       <button onClick={onToggle}
-        className="fixed top-[52px] right-4 z-[1000] w-10 h-10 glass rounded-xl flex items-center justify-center hover:bg-white/90 transition-all duration-300 border border-white/30 btn-glow relative"
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000] w-14 h-14 glass rounded-full flex items-center justify-center hover:bg-white/90 transition-all duration-300 border border-white/30 shadow-xl shadow-black/10 btn-glow relative"
         title="Pollution Alerts">
-        <span className="text-lg">🔔</span>
+        <span className="text-2xl">🔔</span>
         {alerts.length > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse-alert shadow-lg shadow-red-500/30">
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse-alert shadow-lg shadow-red-500/30">
             {Math.min(alerts.length, 99)}
           </span>
         )}
-        <div className={`absolute bottom-1 right-1 w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-red-400"} ${connected ? "animate-pulse" : ""}`} />
+        <div className={`absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-red-400"} ${connected ? "animate-pulse" : ""}`} />
       </button>
 
       {/* Panel */}
