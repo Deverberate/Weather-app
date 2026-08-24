@@ -15,7 +15,6 @@ export default function Header({ stationCount, lastUpdated, darkMode, onToggleDa
       <div className="flex items-center justify-between px-6 py-3">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            {/* Animated globe icon */}
             <div className="relative">
               <span className="text-2xl animate-float">🌍</span>
               <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white animate-pulse" />
@@ -30,8 +29,7 @@ export default function Header({ stationCount, lastUpdated, darkMode, onToggleDa
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-sm">
-          {/* Station count badge */}
+        <div className="flex items-center gap-3 text-sm">
           <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-full px-3 py-1.5 border border-blue-100">
             <div className="relative">
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse block" />

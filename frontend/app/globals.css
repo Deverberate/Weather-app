@@ -263,3 +263,120 @@ html, body {
   pointer-events: none;
   z-index: 1;
 }
+
+/* Dark mode overrides */
+.dark {
+  color-scheme: dark;
+}
+
+.dark body,
+.dark .bg-gray-50 {
+  background-color: #0f172a;
+}
+
+.dark .glass {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark .glass-dark {
+  background: rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800 {
+  color: #f1f5f9;
+}
+
+.dark .text-gray-700,
+.dark .text-gray-600 {
+  color: #cbd5e1;
+}
+
+.dark .text-gray-500 {
+  color: #94a3b8;
+}
+
+.dark .text-gray-400 {
+  color: #64748b;
+}
+
+.dark .bg-white {
+  background-color: #1e293b;
+}
+
+.dark .bg-gray-50 {
+  background-color: #1e293b;
+}
+
+.dark .bg-gray-100 {
+  background-color: #334155;
+}
+
+.dark .border-gray-200 {
+  border-color: #334155;
+}
+
+.dark .border-gray-100 {
+  border-color: #1e293b;
+}
+
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #334155;
+}
+
+.dark .divide-white\/5 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.dark .bg-white\/80 {
+  background-color: rgba(15, 23, 42, 0.8);
+}
+
+.dark .hover\:bg-gray-50:hover {
+  background-color: #1e293b;
+}
+
+.dark .hover\:bg-blue-50:hover {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.dark .hover\:bg-indigo-50:hover {
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+.dark .bg-gradient-to-r.from-blue-50.to-indigo-50 {
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.15));
+}
+
+.dark .bg-gradient-to-br.from-gray-50.to-gray-100 {
+  background: linear-gradient(to bottom right, #1e293b, #334155);
+}
+
+.dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.15);
+}
+
+.dark .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.15);
+}
+
+.dark .bg-gray-50 {
+  background-color: #1e293b;
+}
+
+.dark select {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  border-color: #334155;
+}
+
+.dark .leaflet-popup-content-wrapper {
+  background: rgba(30, 41, 59, 0.95) !important;
+  color: #e2e8f0;
+}
+
+.dark .leaflet-popup-tip {
+  background: rgba(30, 41, 59, 0.95) !important;
+}
