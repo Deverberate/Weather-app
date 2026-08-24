@@ -9,7 +9,7 @@ import Legend from "@/components/Legend";
 import CitySearch from "@/components/CitySearch";
 import ComparePanel from "@/components/ComparePanel";
 import { Station, Alert } from "@/types";
-import { fetchAllStations } from "@/lib/api";
+import { fetchAllStations, fetchStationsOnDemand } from "@/lib/api";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -30,6 +30,7 @@ export default function Home() {
   const [compareOpen, setCompareOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchingArea, setFetchingArea] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([20, 0]);
   const [mapZoom, setMapZoom] = useState(2);
@@ -65,21 +66,24 @@ export default function Home() {
     setAlertPanelOpen(false);
   }, []);
 
-  const handleCitySearch = useCallback((lat: number, lon: number, name: string) => {
+  const handleCitySearch = useCallback(async (lat: number, lon: number, name: string) => {
     setMapCenter([lat, lon]);
     setMapZoom(12);
-    fetch(`/api/stations?min_lon=${lon - 0.2}&min_lat=${lat - 0.2}&max_lon=${lon + 0.2}&max_lat=${lat + 0.2}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.stations?.length > 0) {
-          setStations((prev) => {
-            const existingIds = new Set(prev.map((s) => s.id));
-            const newStations = data.stations.filter((s: Station) => !existingIds.has(s.id));
-            return [...prev, ...newStations];
-          });
-        }
-      })
-      .catch(() => {});
+    setFetchingArea(true);
+
+    try {
+      // 1. Fetch live data from OpenAQ for this area
+      await fetchStationsOnDemand(lat, lon, 15000);
+
+      // 2. Reload all stations from cache (now includes the new data)
+      const data = await fetchAllStations();
+      setStations(data.stations || []);
+      setLastUpdated(new Date());
+    } catch (e) {
+      console.error("Failed to fetch area data:", e);
+    } finally {
+      setFetchingArea(false);
+    }
   }, []);
 
   const handleMyLocation = useCallback(() => {
@@ -142,8 +146,13 @@ export default function Home() {
       {/* Action buttons */}
       <div className="fixed top-[110px] left-4 z-[1000] flex flex-col gap-2">
         <button onClick={handleMyLocation}
-          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
-          <span>📍</span> My Location
+          disabled={fetchingArea}
+          className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2 disabled:opacity-50">
+          {fetchingArea ? (
+            <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500" /> Fetching...</>
+          ) : (
+            <><span>📍</span> My Location</>
+          )}
         </button>
         <button onClick={() => setCompareOpen(true)}
           className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 flex items-center gap-2">
@@ -158,6 +167,14 @@ export default function Home() {
           <span>📥</span> Export
         </button>
       </div>
+
+      {/* Fetching indicator */}
+      {fetchingArea && (
+        <div className="fixed top-[60px] left-80 z-[1000] bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-700 flex items-center gap-2">
+          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500" />
+          Fetching live data from OpenAQ...
+        </div>
+      )}
 
       <Legend />
 

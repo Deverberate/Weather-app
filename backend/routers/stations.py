@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from backend import db
+from backend.config import Settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/stations", tags=["stations"])
@@ -11,14 +12,13 @@ router = APIRouter(prefix="/api/stations", tags=["stations"])
 
 @router.get("")
 async def list_stations(
-    min_lon: float = Query(-180, description="Bounding box min longitude"),
-    min_lat: float = Query(-90, description="Bounding box min latitude"),
-    max_lon: float = Query(180, description="Bounding box max longitude"),
-    max_lat: float = Query(90, description="Bounding box max latitude"),
+    min_lon: float = Query(-180),
+    min_lat: float = Query(-90),
+    max_lon: float = Query(180),
+    max_lat: float = Query(90),
 ):
     """Get all stations within a bounding box."""
     rows = await db.get_stations_in_bbox(min_lon, min_lat, max_lon, max_lat)
-
     stations = []
     for row in rows:
         stations.append({
@@ -33,7 +33,6 @@ async def list_stations(
             "latest_unit": row.get("top_unit"),
             "latest_display_name": row.get("top_display_name"),
         })
-
     return {"stations": stations, "count": len(stations)}
 
 
@@ -46,27 +45,21 @@ async def list_all_stations():
         sid = row["id"]
         if sid not in stations:
             stations[sid] = {
-                "id": sid,
-                "name": row["name"],
+                "id": sid, "name": row["name"],
                 "locality": row.get("locality"),
                 "country_code": row.get("country_code"),
-                "latitude": row["latitude"],
-                "longitude": row["longitude"],
+                "latitude": row["latitude"], "longitude": row["longitude"],
                 "readings": [],
-                "latest_pollutant": None,
-                "latest_value": None,
-                "latest_unit": None,
-                "latest_display_name": None,
+                "latest_pollutant": None, "latest_value": None,
+                "latest_unit": None, "latest_display_name": None,
             }
         if row.get("parameter"):
             stations[sid]["readings"].append({
                 "parameter": row["parameter"],
                 "display_name": row["display_name"],
-                "value": row["value"],
-                "unit": row["unit"],
+                "value": row["value"], "unit": row["unit"],
             })
 
-    # Pick the worst pollutant as the "latest" for map coloring
     priority_params = ["pm25", "pm10", "no2", "o3", "so2", "co"]
     for sid, station in stations.items():
         best_reading = None
@@ -88,37 +81,95 @@ async def list_all_stations():
     return {"stations": result, "count": len(result)}
 
 
+@router.post("/fetch")
+async def fetch_stations_on_demand(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius: int = Query(15000, le=25000),
+):
+    """Fetch live data from OpenAQ for a specific area and cache it.
+
+    This is called when the user searches for a city or uses My Location
+    to ensure fresh data is available.
+    """
+    from backend.services.openaq_client import OpenAQClient
+    from backend.services.alert_engine import check_station_readings
+
+    settings = Settings()
+    client = OpenAQClient(settings.openaq_api_key)
+
+    try:
+        coords = f"{lat},{lon}"
+        resp = await client.get_locations(coordinates=coords, radius=radius, limit=10)
+        locations = resp.get("results", [])
+        logger.info(f"On-demand fetch: found {len(locations)} stations near ({lat}, {lon})")
+
+        created_stations = []
+        for loc_data in locations:
+            parsed = client.parse_location(loc_data)
+            if not parsed["latitude"] and not parsed["longitude"]:
+                continue
+            if parsed["is_mobile"]:
+                continue
+
+            sensor_map = client.build_sensor_map(loc_data)
+
+            await db.upsert_station(
+                station_id=parsed["id"], name=parsed["name"],
+                locality=parsed["locality"],
+                country_code=parsed["country_code"],
+                country_name=parsed["country_name"],
+                latitude=parsed["latitude"], longitude=parsed["longitude"],
+                is_mobile=parsed["is_mobile"], is_monitor=parsed["is_monitor"],
+                sensors=parsed["sensors"],
+            )
+
+            latest_resp = await client.get_latest(location_id=parsed["id"])
+            readings_raw = latest_resp.get("results", [])
+            parsed_readings = []
+            for reading in readings_raw:
+                pr = client.parse_measurement(reading, sensor_map=sensor_map)
+                parsed_readings.append(pr)
+                if pr["value"] is not None:
+                    await db.upsert_reading(
+                        station_id=parsed["id"],
+                        sensor_id=pr["sensor_id"],
+                        parameter=pr["parameter"],
+                        display_name=pr["display_name"],
+                        value=pr["value"], unit=pr["unit"],
+                        last_updated=pr["last_updated"],
+                    )
+
+            if parsed_readings:
+                await check_station_readings(
+                    station_id=parsed["id"],
+                    station_name=parsed["name"],
+                    latitude=parsed["latitude"],
+                    longitude=parsed["longitude"],
+                    readings=parsed_readings,
+                    preset=settings.alert_threshold_preset,
+                )
+
+            created_stations.append(parsed["id"])
+
+        return {
+            "ok": True,
+            "stations_found": len(locations),
+            "stations_cached": len(created_stations),
+            "station_ids": created_stations,
+        }
+    except Exception as e:
+        logger.error(f"On-demand fetch failed: {e}")
+        return {"ok": False, "error": str(e), "stations_found": 0}
+    finally:
+        await client.close()
+
+
 @router.get("/{station_id}")
 async def get_station(station_id: int):
     """Get station detail with all latest readings."""
     detail = await db.get_station_detail(station_id)
     if not detail:
         raise HTTPException(status_code=404, detail="Station not found")
-
     readings = detail.pop("readings", [])
-    return {
-        "station": detail,
-        "readings": readings,
-    }
-
-
-@router.get("/{station_id}/history")
-async def get_station_history(
-    station_id: int,
-    parameter: Optional[str] = None,
-    limit: int = Query(100, ge=1, le=1000),
-):
-    """Get historical measurements for a station."""
-    detail = await db.get_station_detail(station_id)
-    if not detail:
-        raise HTTPException(status_code=404, detail="Station not found")
-
-    readings = detail.get("readings", [])
-    if parameter:
-        readings = [r for r in readings if r.get("parameter") == parameter]
-
-    return {
-        "station_id": station_id,
-        "readings": readings,
-        "note": "Showing cached latest readings. Full history available via OpenAQ API.",
-    }
+    return {"station": detail, "readings": readings}
